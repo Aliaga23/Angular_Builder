@@ -121,9 +121,15 @@ def generate_component_html(component_name):
         return """<nav class="component-navbar" [ngStyle]="props">
   <span>{{ props.title || 'Navbar' }}</span>
   <div *ngIf="props.links">
-    <a *ngFor="let link of props.links" href="#">{{ link }}</a>
+    <a *ngFor="let link of props.links"
+       [routerLink]="['/', link]"
+       routerLinkActive="active"
+       style="margin-left: 12px; text-decoration: none; color: inherit;">
+      {{ link | titlecase }}
+    </a>
   </div>
 </nav>"""
+
 
     elif component_name == "image":
         return """<img 
@@ -135,6 +141,21 @@ def generate_component_html(component_name):
     'border-radius': props.borderRadius || '4px'
   }"
 />"""
+
+    elif component_name == "table":
+        return """<table class="component-table">
+  <thead>
+    <tr>
+      <th *ngFor="let header of props.headers">{{ header }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let row of props.rows">
+      <td *ngFor="let cell of row">{{ cell }}</td>
+    </tr>
+  </tbody>
+</table>"""
+
 
     elif component_name == "text":
         return """<p 
@@ -210,6 +231,31 @@ def generate_component_scss(component_name):
   background-color: white;
   border: 1px solid #ccc;
 }"""
+
+    elif component_name == "table":
+        return """.component-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Oswald', sans-serif;
+  background-color: #ffffff;
+  color: #0f172a;
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+  }
+
+  thead {
+    background-color: #e2e8f0;
+  }
+
+  tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+}"""
+
+
 
     elif component_name == "textarea":
         return """.component-textarea {
