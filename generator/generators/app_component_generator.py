@@ -107,7 +107,6 @@ def generate_app_scss(components, background_color="#121212"):
     return scss
 
 
-# ✅ Nueva función para organizar por jerarquía
 def organize_components_by_hierarchy(components):
     components_map = {c.id: c for c in components}
     for c in components:
