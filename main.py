@@ -1,9 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
 from generator.models import AngularAppSchema
 from generator.angular_project_builder import generar_proyecto_angular
 from collab.router import router as collab_router
+
+from db.models import Base  # <-- IMPORT DB
+from db.database import engine  # <-- IMPORT ENGINE
+from auth.routes import router as auth_router
+
 
 app = FastAPI()
 
@@ -24,4 +30,7 @@ def generar_app(data: AngularAppSchema):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar el proyecto: {str(e)}")
 
+# Rutas de colaboración en tiempo real
 app.include_router(collab_router)
+app.include_router(auth_router)
+
