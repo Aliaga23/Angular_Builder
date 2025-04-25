@@ -9,6 +9,8 @@ from collab.router import router as collab_router
 from db.models import Base  # <-- IMPORT DB
 from db.database import engine  # <-- IMPORT ENGINE
 from auth.routes import router as auth_router
+from collab.project_routes import router as project_router
+from crud_generator.router import router as crud_router
 
 
 app = FastAPI()
@@ -33,4 +35,6 @@ def generar_app(data: AngularAppSchema):
 # Rutas de colaboración en tiempo real
 app.include_router(collab_router)
 app.include_router(auth_router)
+app.include_router(project_router)
+app.include_router(crud_router)
 

@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, TIMESTAMP, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, TIMESTAMP, ForeignKey, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 import datetime
@@ -21,3 +21,7 @@ class Project(Base):
     name = Column(String, nullable=False)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"))
     created_at = Column(TIMESTAMP, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Nuevo campo para guardar todo el estado del proyecto como JSON
+    data = Column(JSONB, nullable=False)

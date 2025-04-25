@@ -1,101 +1,117 @@
+import json
+import time
 from typing import Dict, Optional
 from fastapi import WebSocket
-import json
-import asyncio
-import time
-from db.redis import redis_client
-
-CHANNEL_PREFIX = "project:"
-
+from .redis_sync import redis_sync
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, Dict[str, WebSocket]] = {}
         self.connected_users: Dict[str, Dict[str, dict]] = {}
+        self.last_event_time: Dict[str, Dict[str, int]] = {}
 
     async def connect(self, websocket: WebSocket, project_id: str, user_id: str):
         await websocket.accept()
         self.active_connections.setdefault(project_id, {})[user_id] = websocket
-        self.connected_users.setdefault(project_id, {})
+        self.connected_users.setdefault(project_id, {})[user_id] = {"userId": user_id}
 
-        # Escuchar cambios desde Redis
-        asyncio.create_task(self.redis_listener(project_id, user_id))
-
-        # Enviar estado inicial y usuarios conectados
+        await redis_sync.start_listener(project_id, self.send_to_user)
         await self.send_connected_users(project_id, user_id)
         await self.send_initial_state(project_id, user_id)
 
-        print(f"[+] Conexión establecida: {user_id} en {project_id}")
+    async def disconnect(self, project_id: str, user_id: str):
+        self.active_connections[project_id].pop(user_id, None)
+        self.connected_users[project_id].pop(user_id, None)
 
-    def disconnect(self, project_id: str, user_id: str):
-        self.active_connections.get(project_id, {}).pop(user_id, None)
-        self.connected_users.get(project_id, {}).pop(user_id, None)
+        if not self.active_connections[project_id]:
+            await redis_sync.clear_state(project_id)
 
-        print(f"[-] Desconexión: {user_id} de {project_id}")
+        await redis_sync.broadcast({
+            "type": "USER_DISCONNECTED",
+            "userId": user_id,
+            "timestamp": int(time.time() * 1000)
+        }, project_id)
 
-        # Si ya no hay nadie conectado, limpiar estado del proyecto
-        if not self.active_connections.get(project_id):
-            asyncio.create_task(redis_client.delete(f"{CHANNEL_PREFIX}{project_id}:state"))
+    async def handle_message(self, raw: str, project_id: str, user_id: str):
+        try:
+            message = json.loads(raw)
+            message.setdefault("timestamp", int(time.time() * 1000))
+            msg_type = message.get("type")
 
-    async def broadcast(self, message: dict, project_id: str, exclude_user_id: Optional[str] = None):
-        await redis_client.publish(f"{CHANNEL_PREFIX}{project_id}", json.dumps(message))
+            if msg_type == "USER_CONNECTED":
+                self.update_user_info(project_id, user_id, message["payload"], message["timestamp"])
+                await redis_sync.broadcast({
+                    "type": "USER_CONNECTED",
+                    "userId": user_id,
+                    "timestamp": message["timestamp"],
+                    "payload": self.connected_users[project_id][user_id]
+                }, project_id, exclude_user_id=user_id)
 
-        # Actualizar estado si corresponde
-        if message["type"] in {
-            "ADD_COMPONENT", "UPDATE_COMPONENT", "REMOVE_COMPONENT", "MOVE_COMPONENT",
-            "ADD_PAGE", "REMOVE_PAGE", "UPDATE_PAGE"
-        } and message.get("fullState"):
-            await self.update_project_state(project_id, message["fullState"])
+            elif msg_type == "CURSOR_POSITION":
+                if self.should_throttle(project_id, user_id, msg_type, 3):
+                    return
+                self.update_user_info(project_id, user_id, {"cursorPosition": message["payload"]}, message["timestamp"])
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
 
-    async def update_project_state(self, project_id: str, new_state: dict):
-        key = f"{CHANNEL_PREFIX}{project_id}:state"
-        await redis_client.set(key, json.dumps(new_state), ex=3600)  # 1h TTL
+            elif msg_type == "ACTIVE_COMPONENT":
+                self.update_user_info(project_id, user_id, {"currentComponent": message["payload"].get("componentId")}, message["timestamp"])
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
+            elif msg_type == "SAVE_PROJECT":
+    # Guardar el estado completo si está presente en el mensaje
+                if message.get("fullState"):
+                    await redis_sync.set_state(project_id, message["fullState"])
+                    print(f"[💾] Estado guardado para proyecto {project_id} por {user_id}")
+            elif msg_type == "CANVAS_RESIZE":
+                self.update_user_info(project_id, user_id, {"canvasSize": message["payload"]}, message["timestamp"])
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
 
-    async def redis_listener(self, project_id: str, user_id: str):
-        pubsub = redis_client.pubsub()
-        await pubsub.subscribe(f"{CHANNEL_PREFIX}{project_id}")
+    # Notificar a todos (excepto quien lo envió)
+                await redis_sync.broadcast({
+                    "type": "PROJECT_SAVED",
+                    "userId": user_id,
+                    "timestamp": message["timestamp"]
+                }, project_id, exclude_user_id=user_id)
 
-        async for msg in pubsub.listen():
-            if msg["type"] == "message":
-                try:
-                    data = json.loads(msg["data"])
-                    if data.get("userId") == user_id:
-                        continue
-                    ws = self.active_connections[project_id].get(user_id)
-                    if ws:
-                        await ws.send_text(json.dumps(data))
-                except Exception as e:
-                    print(f"[!] Error reenviando desde Redis a {user_id}: {e}")
-                    break
+            else:
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
+
+        except Exception as e:
+            print(f"[!] Error procesando mensaje: {e}")
+
+    def update_user_info(self, project_id: str, user_id: str, info: dict, ts: int):
+        user = self.connected_users[project_id].setdefault(user_id, {"userId": user_id})
+        user.update(info)
+        user["lastActive"] = ts
+
+    def should_throttle(self, project_id: str, user_id: str, event_type: str, interval_ms: int) -> bool:
+        now = int(time.time() * 1000)
+        key = f"{event_type}:{user_id}"
+        proj = self.last_event_time.setdefault(project_id, {})
+        if now - proj.get(key, 0) < interval_ms:
+            return True
+        proj[key] = now
+        return False
 
     async def send_connected_users(self, project_id: str, user_id: str):
         ws = self.active_connections[project_id].get(user_id)
-        if not ws:
-            return
-        try:
+        if ws:
             await ws.send_text(json.dumps({
                 "type": "CONNECTED_USERS",
                 "payload": list(self.connected_users[project_id].values())
             }))
-        except Exception as e:
-            print(f"[!] Error enviando lista a {user_id}: {e}")
 
     async def send_initial_state(self, project_id: str, user_id: str):
         ws = self.active_connections[project_id].get(user_id)
-        if not ws:
-            return
-        try:
-            raw_state = await redis_client.get(f"{CHANNEL_PREFIX}{project_id}:state")
-            if raw_state:
-                await ws.send_text(json.dumps({
-                    "type": "INITIAL_STATE",
-                    "payload": json.loads(raw_state)
-                }))
-        except Exception as e:
-            print(f"[!] Error enviando INITIAL_STATE a {user_id}: {e}")
+        state = await redis_sync.get_state(project_id)
+        if ws and state:
+            await ws.send_text(json.dumps({
+                "type": "INITIAL_STATE",
+                "payload": state
+            }))
 
-    def update_user_info(self, project_id: str, user_id: str, info: dict):
-        user = self.connected_users.setdefault(project_id, {}).setdefault(user_id, {})
-        user.update(info)
-        user["userId"] = user_id
-        user["lastActive"] = info.get("lastActive", int(time.time() * 1000))
+    async def send_to_user(self, project_id: str, user_id: str, message: dict):
+        ws = self.active_connections.get(project_id, {}).get(user_id)
+        if ws:
+            await ws.send_text(json.dumps(message))
+
+connection_manager = ConnectionManager()
