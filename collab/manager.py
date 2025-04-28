@@ -25,10 +25,10 @@ class ConnectionManager:
 
         await redis_sync.start_listener(project_id, self.send_to_user)
 
-    # 👇 Primero enviarle SOLO al nuevo usuario el estado de todos
-        await self.send_connected_users(project_id, user_id)
+       # Primero: actualizar lista completa para TODOS (incluyendo él)
+        await self.send_connected_users_to_all(project_id)
 
-    # 👇 Luego avisar a todos (menos él) que se conectó
+# Segundo: seguir notificando que se conectó (por si quieres logs o acciones)
         await redis_sync.broadcast({
             "type": "USER_CONNECTED",
             "userId": user_id,

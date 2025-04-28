@@ -1,4 +1,8 @@
-# db/redis.py
 import redis.asyncio as redis
 
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+redis_client = redis.Redis(
+    host="centerbeam.proxy.rlwy.net",
+    port=50271,
+    password="oAlLlywiTdkuwSwSDDMtieMuDkDNsToa",
+    decode_responses=True
+)
