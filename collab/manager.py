@@ -12,25 +12,70 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, project_id: str, user_id: str):
         await websocket.accept()
+
         self.active_connections.setdefault(project_id, {})[user_id] = websocket
-        self.connected_users.setdefault(project_id, {})[user_id] = {"userId": user_id}
+        self.connected_users.setdefault(project_id, {})[user_id] = {
+            "userId": user_id,
+            "username": f"Usuario {user_id[:4]}",
+            "color": None,
+            "lastActive": int(time.time() * 1000),
+            "cursorPosition": None,
+            "currentComponent": None,
+        }
 
         await redis_sync.start_listener(project_id, self.send_to_user)
+
+    # 👇 Primero enviarle SOLO al nuevo usuario el estado de todos
         await self.send_connected_users(project_id, user_id)
+
+    # 👇 Luego avisar a todos (menos él) que se conectó
+        await redis_sync.broadcast({
+            "type": "USER_CONNECTED",
+            "userId": user_id,
+            "timestamp": int(time.time() * 1000),
+            "payload": self.connected_users[project_id][user_id]
+        }, project_id, exclude_user_id=user_id)
+
+
+    # (opcional) También enviar estado inicial del canvas
         await self.send_initial_state(project_id, user_id)
 
+
+
+
+    async def send_connected_users_to_all(self, project_id: str):
+        payload = {
+            "type": "CONNECTED_USERS",
+            "payload": list(self.connected_users[project_id].values())
+        }
+        for user_id, ws in self.active_connections.get(project_id, {}).items():
+            await ws.send_text(json.dumps(payload))
+
+
+
     async def disconnect(self, project_id: str, user_id: str):
+    # Guardar el usuario antes de eliminarlo
+        disconnected_user = self.connected_users[project_id].get(user_id)
+
+    # Remover al usuario de las conexiones y la lista
         self.active_connections[project_id].pop(user_id, None)
         self.connected_users[project_id].pop(user_id, None)
 
+    # Si ya no hay nadie conectado, limpiar el estado
         if not self.active_connections[project_id]:
             await redis_sync.clear_state(project_id)
 
-        await redis_sync.broadcast({
-            "type": "USER_DISCONNECTED",
-            "userId": user_id,
-            "timestamp": int(time.time() * 1000)
-        }, project_id)
+    # Avisar a todos que este usuario se desconectó
+        if disconnected_user:
+            await redis_sync.broadcast({
+                "type": "USER_DISCONNECTED",
+                "userId": user_id,
+                "timestamp": int(time.time() * 1000),
+                "payload": disconnected_user
+            }, project_id)
+    # ❗ Muy importante: actualizar la lista de conectados para todos
+        await self.send_connected_users_to_all(project_id)
+
 
     async def handle_message(self, raw: str, project_id: str, user_id: str):
         try:
@@ -40,6 +85,8 @@ class ConnectionManager:
 
             if msg_type == "USER_CONNECTED":
                 self.update_user_info(project_id, user_id, message["payload"], message["timestamp"])
+                await self.send_connected_users_to_all(project_id)
+
                 await redis_sync.broadcast({
                     "type": "USER_CONNECTED",
                     "userId": user_id,
