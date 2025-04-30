@@ -13,6 +13,12 @@ from generator.generators.components_index_generator import generate_components_
 from generator.generators.page_generator import generate_pages_files
 from generator.generators.routing_generator import generate_routing_files
 
+
+def agregar_bat_inicio(ruta_proyecto: str):
+    bat_path = os.path.join(ruta_proyecto, "start-angular.bat")
+    with open(bat_path, "w") as f:
+        f.write("npm install\nnpx ng serve\npause")
+
 def generar_proyecto_angular(data: AngularAppSchema) -> str:
     try:
         temp_dir = tempfile.mkdtemp()
@@ -35,17 +41,22 @@ def generar_proyecto_angular(data: AngularAppSchema) -> str:
             **generate_routing_files(data.pages, default_page),
         }
 
+        # Escribir todos los archivos generados
         for path, content in files.items():
             full_path = os.path.join(temp_dir, path)
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
+        agregar_bat_inicio(temp_dir)
+
+        # Comprimir
         zip_path = shutil.make_archive(temp_dir, "zip", temp_dir)
         return zip_path
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar el proyecto: {str(e)}")
+
 
 def organize_components_by_hierarchy(components: List[Component]):
     components_map = {c.id: {**c.dict(), "children": []} for c in components}
