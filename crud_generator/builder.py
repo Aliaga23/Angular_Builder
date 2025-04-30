@@ -62,7 +62,7 @@ def generate_service(request: GenerateRequest) -> str:
         f"  getAll(): Observable<{class_name}[]> {{ return of(this.items); }}",
         "",
         f"  getById({pk_name}: {ts_type}): Observable<{class_name}> {{",
-        f"    const item = this.items.find(item => item.{pk_name} === {pk_name});",
+        f"    const item = this.items.find(item => String(item.{pk_name}) === String({pk_name}));",
         f"    return of(item as {class_name});",
         "  }",
         "",
@@ -77,7 +77,11 @@ def generate_service(request: GenerateRequest) -> str:
             f"    }} as {class_name};"
         ]
     else:
-        lines.append(f"    const newItem = {{ ...item }} as {class_name};")
+        lines += [
+            f"    const exists = this.items.some(i => String(i.{pk_name}) === String(item.{pk_name}));",
+            f"    if (exists) throw new Error('{pk_name} duplicado');",
+            f"    const newItem = {{ ...item }} as {class_name};"
+        ]
 
     lines += [
         "    this.items.push(newItem);",
@@ -85,13 +89,13 @@ def generate_service(request: GenerateRequest) -> str:
         "  }",
         "",
         f"  update(item: {class_name}): Observable<{class_name}> {{",
-        f"    const index = this.items.findIndex(i => i.{pk_name} === item.{pk_name});",
+        f"    const index = this.items.findIndex(i => String(i.{pk_name}) === String(item.{pk_name}));",
         "    if (index !== -1) { this.items[index] = item; return of(item); }",
         f"    return of({{}} as {class_name});",
         "  }",
         "",
         f"  delete({pk_name}: {ts_type}): Observable<boolean> {{",
-        f"    const index = this.items.findIndex(item => item.{pk_name} === {pk_name});",
+        f"    const index = this.items.findIndex(item => String(item.{pk_name}) === String({pk_name}));",
         "    if (index !== -1) { this.items.splice(index, 1); return of(true); }",
         "    return of(false);",
         "  }",
@@ -99,6 +103,7 @@ def generate_service(request: GenerateRequest) -> str:
     ]
 
     return "\n".join(lines)
+
 
 
 
@@ -695,8 +700,16 @@ def generate_list_component_scss() -> str:
 }
 
 .table {
-  color: #e2e8f0;
+  color: white; /* <-- esto cambia los textos */
   margin-bottom: 0;
+}
+
+.table th {
+  color: white;
+}
+
+.table td {
+  color: white;
 }
 
 .table-striped > tbody > tr:nth-of-type(odd) {
@@ -716,6 +729,7 @@ def generate_list_component_scss() -> str:
   height: 3rem;
 }
 """
+
 def generate_detail_component_ts(request: GenerateRequest) -> str:
     class_name = request.name
     lower_class_name = class_name.lower()
@@ -999,16 +1013,17 @@ def generate_form_component_html(request: GenerateRequest) -> str:
     auto_increment = request.auto_increment
     inputs = ""
 
+    # Incluir el campo de la primary key solo si no es autoincrementable y no está ya en los atributos
     if not auto_increment and not any(attr.name == primary_key for attr in attributes):
         inputs += f"""<div class="col-md-6">
   <label class="form-label">{primary_key.capitalize()} *</label>
-  <input type="text" formControlName="{primary_key}" class="form-control" required>
+  <input type="number" formControlName="{primary_key}" class="form-control" required>
 </div>
 """
 
     for attr in attributes:
         if auto_increment and attr.name == primary_key:
-            continue
+            continue  # saltar el id si es autoincremental y ya está en attributes
 
         label = attr.name.capitalize()
         name = attr.name
@@ -1073,6 +1088,7 @@ def generate_form_component_html(request: GenerateRequest) -> str:
     </div>
   </div>
 </div>"""
+
 
 def generate_form_component_scss() -> str:
     return """.card {
