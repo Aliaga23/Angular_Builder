@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 import os
 import shutil
 from imagetoui.utils.gemini import analizar_mockup
@@ -23,9 +23,15 @@ async def generar_angular_desde_mockup(
 
     descripcion_ui = analizar_mockup(ruta_temp)
     generar_angular(descripcion_ui, proyecto_path)
+
+    # Crear archivo .bat para iniciar el proyecto
+    bat_path = os.path.join(proyecto_path, "start-angular.bat")
+    with open(bat_path, "w") as bat_file:
+        bat_file.write("npm install\nng serve")
+
     comprimir_proyecto(proyecto_path, zip_path)
 
-    # Agregar tareas de limpieza en segundo plano
+    # Agregar tareas de limpieza
     background_tasks.add_task(os.remove, ruta_temp)
     background_tasks.add_task(shutil.rmtree, proyecto_path, ignore_errors=True)
     background_tasks.add_task(os.remove, zip_path)
