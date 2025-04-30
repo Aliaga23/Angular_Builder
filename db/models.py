@@ -11,7 +11,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = Column(String, nullable=False)
     email = Column(String, unique=True)
-    password = Column(String, nullable=False)  # 🔸 Campo nuevo requerido
+    password = Column(String, nullable=False)  
     color = Column(String, default="#3b82f6")
     created_at = Column(TIMESTAMP, default=datetime.datetime.utcnow)
 
@@ -23,7 +23,6 @@ class Project(Base):
     created_at = Column(TIMESTAMP, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Nuevo campo para guardar todo el estado del proyecto como JSON
     data = Column(JSONB, nullable=False)
 
 class UserProjectAccess(Base):
