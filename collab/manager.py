@@ -111,6 +111,10 @@ class ConnectionManager:
             elif msg_type == "CANVAS_RESIZE":
                 self.update_user_info(project_id, user_id, {"canvasSize": message["payload"]}, message["timestamp"])
                 await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
+            elif msg_type in ["ADD_PAGE", "UPDATE_PAGE", "REMOVE_PAGE"]:
+    # Simplemente reenvía el mensaje a todos los demás
+                print(f"[📄] {msg_type} recibido de {user_id}: {message}")
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
 
     # Notificar a todos (excepto quien lo envió)
                 await redis_sync.broadcast({

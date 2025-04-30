@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 import datetime
-
+from sqlalchemy import PrimaryKeyConstraint
 Base = declarative_base()
 
 class User(Base):
@@ -25,3 +25,13 @@ class Project(Base):
     
     # Nuevo campo para guardar todo el estado del proyecto como JSON
     data = Column(JSONB, nullable=False)
+
+class UserProjectAccess(Base):
+    __tablename__ = "user_project_access"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("project.id", ondelete="CASCADE"), nullable=False)
+    granted_at = Column(TIMESTAMP, default=datetime.datetime.utcnow)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('user_id', 'project_id'),
+    )

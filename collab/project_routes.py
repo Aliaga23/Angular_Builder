@@ -5,6 +5,10 @@ from db.models import Project
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID, uuid4
+from db.models import UserProjectAccess,  User
+from db.database import get_db
+from auth.dependencies import get_current_user  # asegúrate de que este archivo exista
+from typing import List
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -85,3 +89,55 @@ def get_projects_by_user(user_id: UUID, db: Session = Depends(get_db)):
             for p in projects
         ]
     }
+
+@router.post("/accept-invite/{project_id}")
+def accept_invite(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Verificar que el proyecto existe
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Verificar si el usuario ya tiene acceso
+    existing = db.query(UserProjectAccess).filter_by(
+        user_id=current_user.id,
+        project_id=project_id
+    ).first()
+
+    if existing:
+        return {"message": "Ya tienes acceso a este proyecto"}
+
+    # Conceder acceso
+    new_access = UserProjectAccess(user_id=current_user.id, project_id=project_id)
+    db.add(new_access)
+    db.commit()
+
+    return {"message": "Acceso concedido correctamente"}
+
+
+@router.get("/shared", response_model=List[dict])
+def get_shared_projects(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    # Obtener proyectos a los que el usuario tiene acceso
+    shared_projects = (
+        db.query(Project)
+        .join(UserProjectAccess, Project.id == UserProjectAccess.project_id)
+        .filter(UserProjectAccess.user_id == current_user.id)
+        .all()
+    )
+
+    return [
+        {
+            "id": str(p.id),
+            "name": p.name,
+            "owner_id": str(p.owner_id),
+            "created_at": p.created_at.isoformat(),
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        }
+        for p in shared_projects
+    ]
