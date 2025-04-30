@@ -11,7 +11,7 @@ from db.database import engine  # <-- IMPORT ENGINE
 from auth.routes import router as auth_router
 from collab.project_routes import router as project_router
 from crud_generator.router import router as crud_router
-
+from imagetoui.router import router as imagetoui_router
 
 app = FastAPI()
 
@@ -37,4 +37,4 @@ app.include_router(collab_router)
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(crud_router)
-
+app.include_router(imagetoui_router)
