@@ -40,6 +40,8 @@ def build_crud_project(request: GenerateRequest) -> str:
         f"src/app/app.component.ts": generate_app_component(class_name),
         f"src/app/app.component.html": generate_app_component_html(),
         f"src/app/app.component.scss": generate_app_component_scss(),
+
+        "start-angular.bat": "npm install\nnpx ng serve\npause",
     }
 
     return create_zip_from_dict(files)
