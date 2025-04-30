@@ -77,47 +77,49 @@ class ConnectionManager:
         await self.send_connected_users_to_all(project_id)
 
 
+     
     async def handle_message(self, raw: str, project_id: str, user_id: str):
         try:
             message = json.loads(raw)
             message.setdefault("timestamp", int(time.time() * 1000))
             msg_type = message.get("type")
+            timestamp = message["timestamp"]
 
             if msg_type == "USER_CONNECTED":
-                self.update_user_info(project_id, user_id, message["payload"], message["timestamp"])
+                self.update_user_info(project_id, user_id, message["payload"], timestamp)
                 await self.send_connected_users_to_all(project_id)
-
                 await redis_sync.broadcast({
                     "type": "USER_CONNECTED",
                     "userId": user_id,
-                    "timestamp": message["timestamp"],
+                    "timestamp": timestamp,
                     "payload": self.connected_users[project_id][user_id]
                 }, project_id, exclude_user_id=user_id)
 
             elif msg_type == "CURSOR_POSITION":
                 if self.should_throttle(project_id, user_id, msg_type, 3):
                     return
-                self.update_user_info(project_id, user_id, {"cursorPosition": message["payload"]}, message["timestamp"])
+                self.update_user_info(project_id, user_id, {"cursorPosition": message["payload"]}, timestamp)
                 await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
 
             elif msg_type == "ACTIVE_COMPONENT":
-                self.update_user_info(project_id, user_id, {"currentComponent": message["payload"].get("componentId")}, message["timestamp"])
+                self.update_user_info(project_id, user_id, {"currentComponent": message["payload"].get("componentId")}, timestamp)
                 await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
+
             elif msg_type == "SAVE_PROJECT":
-    # Guardar el estado completo si está presente en el mensaje
                 if message.get("fullState"):
                     await redis_sync.set_state(project_id, message["fullState"])
                     print(f"[💾] Estado guardado para proyecto {project_id} por {user_id}")
-            elif msg_type == "CANVAS_RESIZE":
-                self.update_user_info(project_id, user_id, {"canvasSize": message["payload"]}, message["timestamp"])
-                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
-            
 
-    # Notificar a todos (excepto quien lo envió)
+            elif msg_type == "CANVAS_RESIZE":
+                self.update_user_info(project_id, user_id, {"canvasSize": message["payload"]}, timestamp)
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
+
+            elif msg_type in {"ADD_PAGE", "UPDATE_PAGE", "REMOVE_PAGE"}:
+                await redis_sync.broadcast(message, project_id, exclude_user_id=user_id)
                 await redis_sync.broadcast({
                     "type": "PROJECT_SAVED",
                     "userId": user_id,
-                    "timestamp": message["timestamp"]
+                    "timestamp": timestamp
                 }, project_id, exclude_user_id=user_id)
 
             else:
