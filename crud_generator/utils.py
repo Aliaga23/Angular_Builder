@@ -1,5 +1,3 @@
-# crud-generator/utils.py
-
 def map_data_type(xmi_type: str) -> str:
     mapping = {
         "int": "number", "integer": "number", "long": "number",

@@ -3,7 +3,7 @@ import base64
 import json
 
 GEMINI_API_KEY = "AIzaSyAo5Nl2Y3o2cxhiOgfyjhbTDgP_towXW_o"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
 
 def analizar_mockup(imagen_path: str) -> str:
     with open(imagen_path, "rb") as f:
@@ -21,10 +21,19 @@ def analizar_mockup(imagen_path: str) -> str:
                     }
                 },
                 {
-                    "text": "Describe esta UI como componentes de Bootstrap y genera el código HTML correspondiente.No te inventes otros componentes solo los de la imagen."
+                    "text": """
+                    Describe esta foto como componentes de Bootstrap y genera el código HTML correspondiente.
+                    No te inventes otros componentes solo los de la imagen, si es necesario incluye iconos de
+                    bootstrap.Hazlo como experto a detalle todo , cada palabra debe estar 
+                    identica a la foto.
+                    """
+                
                 }
             ]
-        }]
+        }],
+        "generationConfig": {
+            "temperature": 0
+        }
     }
 
     response = requests.post(

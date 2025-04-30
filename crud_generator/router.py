@@ -66,26 +66,35 @@ def parse_uml13(root):
 
 def parse_uml21(root):
     classes = []
+    class_id_map = {}
+    associations = []
 
     for elem in root.iter():
         if elem.tag.endswith("packagedElement") and elem.attrib.get(f"{{{XMI_NS}}}type") == "uml:Class":
+            class_id = elem.attrib.get(f"{{{XMI_NS}}}id")
             class_name = elem.attrib.get("name", "UnnamedClass")
-            attributes = []
+            class_id_map[class_id] = class_name
 
+            attributes = []
             for attr in elem.findall("ownedAttribute"):
                 attr_name = attr.attrib.get("name", "unnamed")
-                type_name = "string"
+                attr_type = "string"
                 type_elem = attr.find("type")
                 if type_elem is not None:
-                    ref = type_elem.attrib.get(f"{{{XMI_NS}}}idref", "")
-                    type_name = normalize_type(ref)
+                    href = type_elem.attrib.get("href", "")
+                    if "Integer" in href:
+                        attr_type = "integer"
+                    elif "String" in href:
+                        attr_type = "string"
+                    else:
+                        attr_type = "string"
 
                 lower_val = attr.find("lowerValue")
                 is_required = lower_val is None or lower_val.attrib.get("value", "1") != "0"
 
                 attributes.append({
                     "name": attr_name,
-                    "type": type_name,
+                    "type": attr_type,
                     "isRequired": is_required
                 })
 
@@ -93,8 +102,67 @@ def parse_uml21(root):
                 "name": class_name,
                 "attributes": attributes,
                 "primary_key": {},
-                "auto_increment": False
+                "auto_increment": False,
+                "xmi:id": class_id
             })
+
+    for elem in root.iter():
+        if elem.tag.endswith("packagedElement") and elem.attrib.get(f"{{{XMI_NS}}}type") == "uml:Association":
+            owned_ends = elem.findall("ownedEnd")
+            if len(owned_ends) == 2:
+                end1, end2 = owned_ends
+                type1_elem = end1.find("type")
+                type2_elem = end2.find("type")
+                type1 = type1_elem.attrib.get(f"{{{XMI_NS}}}idref") if type1_elem is not None else None
+                type2 = type2_elem.attrib.get(f"{{{XMI_NS}}}idref") if type2_elem is not None else None
+
+                upper1 = end1.find("upperValue")
+                upper2 = end2.find("upperValue")
+                upper_val1 = upper1.attrib.get("value", "1") if upper1 is not None else "1"
+                upper_val2 = upper2.attrib.get("value", "1") if upper2 is not None else "1"
+
+                name1 = class_id_map.get(type1)
+                name2 = class_id_map.get(type2)
+                if not name1 or not name2:
+                    continue
+
+                if upper_val1 in ["*", "-1"] and upper_val2 in ["*", "-1"]:
+                    attr1 = f"{name1.lower()}_id"
+                    attr2 = f"{name2.lower()}_id"
+                    classes.append({
+                        "name": f"{name1}_{name2}",
+                        "attributes": [
+                            {"name": "id", "type": "integer", "isRequired": True},
+                            {"name": attr1, "type": "integer", "isRequired": True},
+                            {"name": attr2, "type": "integer", "isRequired": True}
+                        ],
+                        "primary_key": {
+                            "name": "id",
+                            "type": "integer"
+                        },
+                        "auto_increment": True
+                    })
+                else:
+                    # Relación 1 a * o 1 a 1: agregar atributo foráneo en el lado que apunta a * o único
+                    if upper_val1 in ["*", "-1"]:
+                        for c in classes:
+                            if c.get("xmi:id") == type1:
+                                c["attributes"].append({
+                                    "name": f"{name2.lower()}_id",
+                                    "type": "integer",
+                                    "isRequired": True
+                                })
+                    if upper_val2 in ["*", "-1"]:
+                        for c in classes:
+                            if c.get("xmi:id") == type2:
+                                c["attributes"].append({
+                                    "name": f"{name1.lower()}_id",
+                                    "type": "integer",
+                                    "isRequired": True
+                                })
+
+    for c in classes:
+        c.pop("xmi:id", None)
 
     return classes
 

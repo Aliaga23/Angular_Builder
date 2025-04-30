@@ -336,6 +336,22 @@ def generate_component_html(component_name):
     </a>
   </div>
 </nav>"""
+    elif component_name == "checklist":
+        return """<div class="component-checklist">
+  <label *ngIf="props.label" [ngStyle]="{ 'color': props.color || '#000000' }">{{ props.label }}</label>
+  <div [ngStyle]="{
+    'display': props.orientation === 'horizontal' ? 'flex' : 'block',
+    'gap': '8px',
+    'color': props.color || '#000000'
+  }">
+    <label *ngFor="let item of props.items" [ngStyle]="{ 'display': 'flex', 'align-items': 'center', 'gap': '4px' }">
+      <input type="checkbox" [(ngModel)]="item.checked" />
+      <span>{{ item.label }}</span>
+    </label>
+  </div>
+</div>"""
+
+
     else:
         return f"""<div class="component-{component_name}" [ngStyle]="props">
   {{ props.text || '{component_name}' }}
@@ -663,6 +679,22 @@ def generate_component_scss(component_name):
     cursor: not-allowed;
   }}
 }}"""
+    
+    elif component_name == "checklist":
+        return """.component-checklist {
+  font-family: 'Oswald', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  label {
+    font-weight: 500;
+  }
+
+  input[type="checkbox"] {
+    margin-right: 6px;
+  }
+}"""
 
     else:
         return f""".component-{component_name} {{
