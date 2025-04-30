@@ -118,16 +118,15 @@ def accept_invite(
     return {"message": "Acceso concedido correctamente"}
 
 
-@router.get("/shared", response_model=List[dict])
-def get_shared_projects(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+@router.get("/shared/{user_id}", response_model=List[dict])
+def get_shared_projects_by_user_id(
+    user_id: UUID,
+    db: Session = Depends(get_db)
 ):
-    # Obtener proyectos a los que el usuario tiene acceso
     shared_projects = (
         db.query(Project)
         .join(UserProjectAccess, Project.id == UserProjectAccess.project_id)
-        .filter(UserProjectAccess.user_id == current_user.id)
+        .filter(UserProjectAccess.user_id == user_id)
         .all()
     )
 
