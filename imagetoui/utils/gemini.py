@@ -2,7 +2,7 @@ import requests
 import base64
 import json
 
-GEMINI_API_KEY = "AIzaSyAo5Nl2Y3o2cxhiOgfyjhbTDgP_towXW_o"
+GEMINI_API_KEY = "AIzaSyCll8ceYPHtQZIuPCF3B0nmt0OohJOy-FQ"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
 
 def analizar_mockup(imagen_path: str) -> str:
